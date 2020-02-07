@@ -2,14 +2,16 @@ package io.vepo.kafka.articles;
 
 import java.util.Properties;
 import java.util.Scanner;
+import java.util.concurrent.Future;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.serialization.StringSerializer;
 
 public class SimpleProducer {
-    private static Scanner in;
 
     public static void main(String[] argv) throws Exception {
         if (argv.length != 1) {
@@ -17,25 +19,26 @@ public class SimpleProducer {
             System.exit(-1);
         }
         String topicName = argv[0];
-        in = new Scanner(System.in);
         System.out.println("Enter message(type exit to quit)");
 
         // Configure the Producer
         Properties configProperties = new Properties();
         configProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
-        configProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
-                "org.apache.kafka.common.serialization.ByteArraySerializer");
-        configProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                "org.apache.kafka.common.serialization.StringSerializer");
+        configProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        configProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 
-        Producer<String, String> producer = new KafkaProducer<>(configProperties);
-        String line = in.nextLine();
-        while (!line.equals("exit")) {
-            ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topicName, line);
-            producer.send(rec);
-            line = in.nextLine();
+        try (Scanner in = new Scanner(System.in);
+                Producer<String, String> producer = new KafkaProducer<>(configProperties)) {
+            String line;
+            do {
+                line = in.nextLine();
+                ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topicName, line);
+                Future<RecordMetadata> results = producer.send(rec);
+                RecordMetadata metadata = results.get();
+                System.out
+                    .println("Message sent on partition=" + metadata.partition() + " with offset=" + metadata.offset());
+            } while (!line.equals("exit"));
+            System.out.print("Exiting...");
         }
-        in.close();
-        producer.close();
     }
 }
